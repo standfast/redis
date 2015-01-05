@@ -14,3 +14,17 @@ redis 127.0.0.1:6379> get laputa
 "come here to swim"
 ```
 
+## set an unique name
+
+```bash
+$ redis-cli
+redis 127.0.0.1:6379> client list
+addr=127.0.0.1:53535 fd=5 name= age=11 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=32768 obl=0 oll=0 omem=0 events=r cmd=client
+redis 127.0.0.1:6379> client unique laputa
+OK
+redis 127.0.0.1:6379> client list
+addr=127.0.0.1:53535 fd=5 name=laputa age=20 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=32768 obl=0 oll=0 omem=0 events=r cmd=client
+redis 127.0.0.1:6379> client unique laputa
+(error) ERR client already exists
+```
+

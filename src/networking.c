@@ -1249,8 +1249,57 @@ void clientCommand(redisClient *c) {
             addReplyBulk(c,c->name);
         else
             addReply(c,shared.nullbulk);
+    } else if (!strcasecmp(c->argv[1]->ptr,"unique") && c->argc >= 3) {
+        int j, len = sdslen(c->argv[2]->ptr);
+        char *p = c->argv[2]->ptr;
+        int checkip = 0;
+        struct sockaddr_in osa, nsa;
+        socklen_t size = sizeof(osa);
+        if (c->argc == 4 && !strcmp(c->argv[3]->ptr, "checkip")) {
+            checkip = 1;
+        }
+        if (len == 0) {
+            addReplyError(c, "empty name");
+            return;
+        }
+        if (checkip) {
+            if (c->flags & REDIS_UNIX_SOCKET) {
+                addReplyError(c, "not support unix socket");
+                return;
+            }
+            if (getpeername(c->fd, (struct sockaddr*)&nsa, &size) == -1) {
+                addReplyError(c, "unknown client");
+                return;
+            }
+        }
+        listRewind(server.clients, &li);
+        while ((ln = listNext(&li)) != NULL) {
+            client = listNodeValue(ln);
+            if (checkip) {
+                if (client->flags & REDIS_UNIX_SOCKET)
+                    continue;
+                if (getpeername(client->fd, (struct sockaddr*)&osa, &size) == -1)
+                    continue;
+                if (osa.sin_addr.s_addr != nsa.sin_addr.s_addr)
+                    continue;
+            }
+            if (client->name && (strcmp(client->name->ptr, p) == 0)) {
+                addReplyError(c, "client already exists");
+                return;
+            }
+        }
+        for (j = 0; j < len; j++) {
+            if (p[j] < '!' || p[j] > '~') { /* ASCII is assumed. */
+                addReplyError(c, "invalid name");
+                return;
+            }
+        }
+        if (c->name) decrRefCount(c->name);
+        c->name = c->argv[2];
+        incrRefCount(c->name);
+        addReply(c, shared.ok);
     } else {
-        addReplyError(c, "Syntax error, try CLIENT (LIST | KILL ip:port | GETNAME | SETNAME connection-name)");
+        addReplyError(c, "Syntax error, try CLIENT (LIST | KILL ip:port | GETNAME | SETNAME name | UNIQUE name)");
     }
 }
 
