@@ -1019,3 +1019,78 @@ void scriptCommand(redisClient *c) {
         addReplyError(c, "Unknown SCRIPT subcommand or wrong # of args.");
     }
 }
+
+/* ---------------------------------------------------------------------------
+ * atexit command
+ * ------------------------------------------------------------------------- */
+
+void atexitCommand(redisClient *c) {
+    if (c->argc < 3) {
+        addReplyError(c, "wrong number");
+        return;
+    }
+
+    if (sdslen(c->argv[1]->ptr) != 40) {
+        addReplyError(c, "invalid script");
+        return;
+    }
+
+    if (dictFind(server.lua_scripts, c->argv[1]->ptr) == NULL) {
+        addReplyError(c, "no matching script");
+        return;
+    }
+
+    c->atexit = sdsnewlen(c->argv[1]->ptr, 40);
+    c->exitargv = c->argv;
+    c->exitargc = c->argc;
+    c->argc = 0;
+    c->argv = NULL;
+
+    redisLog(REDIS_DEBUG, "atexit, hello");
+    addReply(c, shared.ok);
+}
+
+void atExitCall(redisClient *c, const sds sha) {
+    lua_State *lua = server.lua;
+    char funcname[43];
+    long long numkeys;
+
+    redisSrand48(0);
+
+    server.lua_random_dirty = 0;
+    server.lua_write_dirty = 0;
+
+    if (getLongLongFromObjectOrReply(c,c->exitargv[2],&numkeys,NULL) != REDIS_OK)
+        return;
+    if (numkeys > (c->exitargc - 3)) {
+        redisLog(REDIS_NOTICE, "number of keys greater than number of args");
+        return;
+    }
+
+    funcname[0] = 'f';
+    funcname[1] = '_';
+    for (int i = 0; i < 40; i++)
+        funcname[i+2] = tolower(sha[i]);
+    funcname[42] = '\0';
+
+    lua_getglobal(lua, funcname);
+    if (lua_isnil(lua, 1)) {
+        redisLog(REDIS_NOTICE, "lua is nil");
+        lua_pop(lua, 1);
+        return;
+    }
+
+    luaSetGlobalArray(lua, "KEYS", c->exitargv+3, numkeys);
+    luaSetGlobalArray(lua, "ARGV", c->exitargv+3+numkeys, c->exitargc-3-numkeys);
+
+    selectDb(server.lua_client, c->db->id);
+
+    if (lua_pcall(lua,0,1,0)) {
+        redisLog(REDIS_NOTICE, "atexit error");
+    }
+
+    lua_gc(lua, LUA_GCSTEP, 1);
+    lua_pop(lua, 1);
+
+    /* todo: check slave */
+}

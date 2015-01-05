@@ -395,6 +395,9 @@ typedef struct redisClient {
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size */
     int argc;
     robj **argv;
+    sds atexit;             /* hash value of atexit */
+    int exitargc;
+    robj **exitargv;        /* argvs of atexit */
     struct redisCommand *cmd, *lastcmd;
     int reqtype;
     int multibulklen;       /* number of multi bulk arguments left to read */
@@ -1061,6 +1064,7 @@ char *sentinelHandleConfiguration(char **argv, int argc);
 
 /* Scripting */
 void scriptingInit(void);
+void atExitCall(redisClient *c, const sds sha);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
@@ -1198,6 +1202,7 @@ void clientCommand(redisClient *c);
 void evalCommand(redisClient *c);
 void evalShaCommand(redisClient *c);
 void scriptCommand(redisClient *c);
+void atexitCommand(redisClient *c);
 void timeCommand(redisClient *c);
 void bitopCommand(redisClient *c);
 void bitcountCommand(redisClient *c);

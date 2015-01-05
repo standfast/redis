@@ -79,6 +79,9 @@ redisClient *createClient(int fd) {
     c->reqtype = 0;
     c->argc = 0;
     c->argv = NULL;
+    c->atexit = NULL;
+    c->exitargc = 0;
+    c->exitargv = NULL;
     c->cmd = c->lastcmd = NULL;
     c->multibulklen = 0;
     c->bulklen = -1;
@@ -597,6 +600,19 @@ void disconnectSlaves(void) {
 
 void freeClient(redisClient *c) {
     listNode *ln;
+
+    if (c->atexit != NULL) {
+        if (sdslen(c->atexit) == 40) {
+            atExitCall(c, c->atexit);
+            redisLog(REDIS_DEBUG, "atexit, goodbye");
+        }
+        sdsfree(c->atexit);
+        for (int j = 0; j < c->exitargc; j++) {
+            decrRefCount(c->exitargv[j]);
+        }
+        c->exitargc = 0;
+        zfree(c->exitargv);
+    }
 
     /* If this is marked as current client unset it */
     if (server.current_client == c) server.current_client = NULL;
